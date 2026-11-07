@@ -84,7 +84,14 @@ export function setup() {
                         sessions: async () => await gatewayData?.readJson(discovery.sessionsFile),
                     })
                     ssoMode = "gateway"
-                    api.logger.info({ gateway: discovery.url }, "直连端口启用网关会话校验")
+                    api.logger.info(
+                        {
+                            gateway: discovery.url,
+                            host: config.host,
+                            allowedHosts: [...config.allowedHosts],
+                        },
+                        "直连端口启用网关会话校验",
+                    )
                 } catch (error) {
                     failClosed = true
                     ssoMode = "unavailable"
@@ -98,6 +105,9 @@ export function setup() {
             const handle = await api.http.createServer(
                 { host: config.host, port: config.port },
                 async (request: HttpRequest) => {
+                    const startedAt = Date.now()
+                    const host = request.headers["host"] ?? ""
+                    const viaGateway = request.headers["x-wellspring-gateway"] === "1"
                     let path = "/"
                     try {
                         path = new URL(request.url, "http://localhost").pathname
@@ -126,18 +136,54 @@ export function setup() {
                                         ? request.headers["x-wellspring-user"] ?? null
                                         : null,
                                 sso: ssoMode,
+                                allowedHosts: [...config.allowedHosts],
                             }),
                         }
+                    }
+                    if (!viaGateway) {
+                        api.logger.info(
+                            {
+                                host,
+                                method: request.method,
+                                url: request.url,
+                                cookie: request.headers["cookie"] !== undefined,
+                            },
+                            "直连请求",
+                        )
                     }
                     const session = await checkSession(request, sso, {
                         allowedHosts: config.allowedHosts,
                         failClosed,
                     })
                     if (!session.ok) {
+                        api.logger.info(
+                            {
+                                host,
+                                url: request.url,
+                                reason: session.reason,
+                                status: session.response.status,
+                                location: session.response.headers?.["location"] ?? null,
+                                durationMs: Date.now() - startedAt,
+                            },
+                            "直连会话未通过",
+                        )
                         return session.response
                     }
                     try {
-                        return await serveStatic(request, api.fs, staticOptions)
+                        const response = await serveStatic(request, api.fs, staticOptions)
+                        if (!viaGateway) {
+                            api.logger.info(
+                                {
+                                    host,
+                                    url: request.url,
+                                    status: response.status ?? 200,
+                                    user: session.user,
+                                    durationMs: Date.now() - startedAt,
+                                },
+                                "直连响应",
+                            )
+                        }
+                        return response
                     } catch (error) {
                         api.logger.error(
                             { error: error instanceof Error ? error.message : String(error) },
