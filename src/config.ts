@@ -13,7 +13,12 @@ export interface WebConfig {
     readonly wwwDir: string
     /** 找不到文件时回退 index.html */
     readonly spaFallback: boolean
+    /** 信任网关头时校验的 Host 主机名（DNS rebinding） */
+    readonly allowedHosts: readonly string[]
 }
+
+/** 默认只信任 loopback 主机名 */
+export const DEFAULT_ALLOWED_HOSTS: readonly string[] = ["127.0.0.1", "localhost", "[::1]"]
 
 export const DEFAULT_WEB_CONFIG: WebConfig = {
     host: "127.0.0.1",
@@ -21,6 +26,7 @@ export const DEFAULT_WEB_CONFIG: WebConfig = {
     routePrefix: "/web",
     wwwDir: "www",
     spaFallback: false,
+    allowedHosts: DEFAULT_ALLOWED_HOSTS,
 }
 
 export interface ParsedWebConfig {
@@ -41,6 +47,52 @@ function normalizePrefix(value: string): string | null {
         return "/"
     }
     return trimmed.replace(/\/+$/, "")
+}
+
+export function normalizeHost(value: string): string | null {
+    const trimmed = value.trim().toLowerCase()
+    if (trimmed === "" || /[\s/\\?#@]/.test(trimmed)) {
+        return null
+    }
+    const candidates =
+        trimmed.includes(":") && !trimmed.startsWith("[") ? [trimmed, `[${trimmed}]`] : [trimmed]
+    for (const candidate of candidates) {
+        try {
+            const hostname = new URL(`http://${candidate}`).hostname.toLowerCase().replace(/\.+$/, "")
+            if (hostname !== "") {
+                return hostname
+            }
+        } catch {
+            /* 换一种写法再试 */
+        }
+    }
+    return null
+}
+
+function parseAllowedHosts(value: unknown, warnings: string[]): readonly string[] {
+    if (value === undefined) {
+        return DEFAULT_ALLOWED_HOSTS
+    }
+    if (!Array.isArray(value)) {
+        warnings.push("allowedHosts 不是数组")
+        return DEFAULT_ALLOWED_HOSTS
+    }
+    const hosts: string[] = [...DEFAULT_ALLOWED_HOSTS]
+    for (const [index, item] of value.entries()) {
+        if (typeof item !== "string") {
+            warnings.push(`allowedHosts[${index}] 不是字符串`)
+            continue
+        }
+        const hostname = normalizeHost(item)
+        if (hostname === null) {
+            warnings.push(`allowedHosts[${index}] 不合法：${item}`)
+            continue
+        }
+        if (!hosts.includes(hostname)) {
+            hosts.push(hostname)
+        }
+    }
+    return hosts
 }
 
 function normalizeWwwDir(value: string): string | null {
@@ -93,6 +145,7 @@ export function parseWebConfig(raw: unknown): ParsedWebConfig {
             routePrefix: rawPrefix ?? defaults.routePrefix,
             wwwDir: rawWww ?? defaults.wwwDir,
             spaFallback: typeof spaFallback === "boolean" ? spaFallback : defaults.spaFallback,
+            allowedHosts: parseAllowedHosts(input["allowedHosts"], warnings),
         },
         warnings,
     }

@@ -1,6 +1,6 @@
 {
     "name": "@xyit-team/wellspring-web",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "description": "Wellspring 网页界面插件：从插件数据目录的 www/ 下发静态资源，经 wellspring-gateway 统一入口访问",
     "license": "MIT",
     "repository": {

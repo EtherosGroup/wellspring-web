@@ -43,3 +43,5 @@ jobs:
                   grep -qx 'package.json' /tmp/zip.txt
                   grep -qx 'index.ts' /tmp/zip.txt
                   grep -qx 'src/static.ts' /tmp/zip.txt
+                  grep -qx 'src/session.ts' /tmp/zip.txt
+                  grep -qx 'src/sso-client.ts' /tmp/zip.txt
