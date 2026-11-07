@@ -3,7 +3,7 @@ import { test } from "node:test"
 
 import type { HttpRequest, HttpResponse } from "wellspring/api/host/index.ts"
 
-import { checkSession, returnUrlOf } from "../src/session.ts"
+import { checkSession, redirectTargetOf } from "../src/session.ts"
 import { createSsoClient, type SsoClient, type SsoResult } from "../src/sso-client.ts"
 
 const GATEWAY_URL = "http://127.0.0.1:8780"
@@ -134,9 +134,68 @@ test("直连未登录 HTML 请求跳网关登录页，next 为当前地址", asy
     assert.equal(decision.response.status, 302)
     assert.equal(
         decision.response.headers?.["location"],
-        `${GATEWAY_URL}/login?next=${encodeURIComponent("http://127.0.0.1:8787/deep/link?x=1")}`,
+        `${GATEWAY_URL}/login?redirect=${encodeURIComponent("127.0.0.1:8787/deep/link?x=1")}`,
     )
     assert.equal(bodyOf(decision.response), "")
+})
+
+
+test("登录地址主机名只在 Host 白名单内替换，局域网 IP 需配置 allowedHosts", async () => {
+    const sso = fakeSso(async () => ({ ok: false, reason: "missing" }))
+    const lanHeaders = { accept: "text/html", host: "192.168.31.138:8787" }
+
+    const rejected = await checkSession(request("/deep?x=1", { headers: lanHeaders }), sso)
+    assert.equal(rejected.ok, false)
+    if (!rejected.ok) {
+        assert.equal(rejected.response.headers?.["location"], `${GATEWAY_URL}/login`)
+    }
+
+    const allowed = await checkSession(request("/deep?x=1", { headers: lanHeaders }), sso, {
+        allowedHosts: ["192.168.31.138"],
+    })
+    assert.equal(allowed.ok, false)
+    if (!allowed.ok) {
+        assert.equal(
+            allowed.response.headers?.["location"],
+            `http://192.168.31.138:8780/login?redirect=${encodeURIComponent("192.168.31.138:8787/deep?x=1")}`,
+        )
+    }
+
+    const localhost = await checkSession(
+        request("/", { headers: { accept: "text/html", host: "localhost:8787" } }),
+        sso,
+    )
+    assert.equal(localhost.ok, false)
+    if (!localhost.ok) {
+        assert.equal(
+            localhost.response.headers?.["location"],
+            `http://localhost:8780/login?redirect=${encodeURIComponent("localhost:8787/")}`,
+        )
+    }
+
+    /* 不可信 Host 回退网关地址且不带 redirect */
+    const rebinding = await checkSession(
+        request("/", { headers: { accept: "text/html", host: "evil.example:8787" } }),
+        sso,
+    )
+    assert.equal(rebinding.ok, false)
+    if (!rebinding.ok) {
+        assert.equal(rebinding.response.headers?.["location"], `${GATEWAY_URL}/login`)
+    }
+})
+
+test("https 网关下直连 http 端口返回 503，不跳转", async () => {
+    const sso = createSsoClient({ gatewayUrl: "https://127.0.0.1:8780" })
+    const client: SsoClient = { ...sso, verify: async () => ({ ok: false, reason: "missing" }) }
+    const decision = await checkSession(
+        request("/", { headers: loopbackHeaders() }),
+        client,
+    )
+    assert.equal(decision.ok, false)
+    if (!decision.ok) {
+        assert.equal(decision.response.status, 503)
+        assert.equal(decision.response.headers?.["location"], undefined)
+    }
 })
 
 test("浏览器默认 Accept 按页面跳转", async () => {
@@ -351,16 +410,16 @@ test("Host 头为空时跳登录页，无 next 参数", async () => {
     }
 })
 
-test("returnUrlOf：拼接 Host 与路径，拒绝控制字符", () => {
+test("redirectTargetOf：拼接 Host 与路径，拒绝控制字符", () => {
     assert.equal(
-        returnUrlOf(request("/deep?x=1", { headers: { host: "127.0.0.1:8787" } })),
-        "http://127.0.0.1:8787/deep?x=1",
+        redirectTargetOf(request("/deep?x=1", { headers: { host: "127.0.0.1:8787" } })),
+        "127.0.0.1:8787/deep?x=1",
     )
     assert.equal(
-        returnUrlOf(request("", { headers: { host: "127.0.0.1:8787" } })),
-        "http://127.0.0.1:8787/",
+        redirectTargetOf(request("", { headers: { host: "127.0.0.1:8787" } })),
+        "127.0.0.1:8787/",
     )
-    assert.equal(returnUrlOf(request("/", { headers: { host: "127.0.0.1:8787\r\nx: y" } })), null)
-    assert.equal(returnUrlOf(request("/", { headers: { host: "127.0.0.1:8787 x" } })), null)
-    assert.equal(returnUrlOf(request("/")), null)
+    assert.equal(redirectTargetOf(request("/", { headers: { host: "127.0.0.1:8787\r\nx: y" } })), null)
+    assert.equal(redirectTargetOf(request("/", { headers: { host: "127.0.0.1:8787 x" } })), null)
+    assert.equal(redirectTargetOf(request("/")), null)
 })

@@ -10,7 +10,7 @@ import { serveStatic, type StaticOptions } from "./src/static.ts"
 const GATEWAY_REGISTER = "wellspring-gateway:upstream:register"
 const GATEWAY_UNREGISTER = "wellspring-gateway:upstream:unregister"
 const HEALTH_PATH = "/__web/health"
-const VERSION = "0.2.0"
+const VERSION = "0.3.0"
 
 /** 直连端口的会话校验模式：gateway 校验网关会话，disabled 网关鉴权已关闭，off 无网关发现文件，unavailable 发现文件异常 */
 type SsoMode = "gateway" | "disabled" | "off" | "unavailable"

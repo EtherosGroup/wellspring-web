@@ -63,26 +63,52 @@ function textResponse(
     }
 }
 
-/* 浏览器当前地址；Host 头缺失或含控制字符返回 null */
-export function returnUrlOf(request: HttpRequest): string | null {
+/* 浏览器当前地址（host[:port] + path），作为网关的 redirect 参数 */
+export function redirectTargetOf(request: HttpRequest): string | null {
     const host = headerValue(request.headers, "host")
     if (host === null || host.trim() === "" || /[\u0000-\u0020\u007f]/.test(host)) {
         return null
     }
     const url = request.url === "" ? "/" : request.url
-    return `http://${host.trim()}${url.startsWith("/") ? url : `/${url}`}`
+    return `${host.trim()}${url.startsWith("/") ? url : `/${url}`}`
 }
 
-function loginResponse(request: HttpRequest, sso: SsoClient): HttpResponse {
-    const returnUrl = returnUrlOf(request)
-    if (returnUrl === null) {
-        return {
-            status: 302,
-            headers: { location: sso.loginUrl(), "cache-control": "no-store" },
-            body: "",
-        }
+/*
+ * 网关登录地址：仅当请求 Host 在 allowedHosts 内时替换登录地址主机名（支持局域网 IP）
+ * 不可信 Host（如 DNS rebinding 域名）回退网关地址，会话 cookie 不落到外部域名
+ */
+export function loginLocationOf(
+    request: HttpRequest,
+    sso: SsoClient,
+    allowedHosts: readonly string[] = DEFAULT_ALLOWED_HOSTS,
+): string {
+    const loginUrl = new URL(sso.loginUrl())
+    const hostname = hostNameOf(request.headers)
+    const trusted = hostname !== null && allowedHosts.includes(hostname)
+    const base = trusted
+        ? `${loginUrl.protocol}//${hostname}${loginUrl.port === "" ? "" : `:${loginUrl.port}`}`
+        : loginUrl.origin
+    const target = trusted ? redirectTargetOf(request) : null
+    if (target === null) {
+        return `${base}${loginUrl.pathname}`
     }
-    return sso.redirectToLogin(returnUrl)
+    return `${base}${loginUrl.pathname}?redirect=${encodeURIComponent(target)}`
+}
+
+function loginResponse(
+    request: HttpRequest,
+    sso: SsoClient,
+    allowedHosts: readonly string[],
+): HttpResponse {
+    /* 插件端口是 http；https 网关下 Secure cookie 不会发给直连端口，跳转会形成循环 */
+    if (new URL(sso.loginUrl()).protocol !== "http:") {
+        return textResponse(503, "直连端口需与网关同协议")
+    }
+    return {
+        status: 302,
+        headers: { location: loginLocationOf(request, sso, allowedHosts), "cache-control": "no-store" },
+        body: "",
+    }
 }
 
 /*
@@ -193,5 +219,9 @@ export async function checkSession(
         }
         rememberRedirect(token, now)
     }
-    return { ok: false, reason: result.reason, response: loginResponse(request, sso) }
+    return {
+        ok: false,
+        reason: result.reason,
+        response: loginResponse(request, sso, allowedHosts),
+    }
 }
