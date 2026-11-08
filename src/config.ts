@@ -2,19 +2,25 @@
  * 网页插件配置
  *
  * 配置文件：<configDir>/plugins/wellspring-web.json
+ * 静态资源默认用插件目录自带的 www/，可用 wwwDir 覆盖为其它绝对路径
  */
+
+import { PLUGIN_WWW_DIR } from "./assets.ts"
+import { DEFAULT_CHAT_LIMITS, type ChatLimits } from "./chat-types.ts"
 
 export interface WebConfig {
     readonly host: string
     readonly port: number
     /** 网关上的路径前缀 */
     readonly routePrefix: string
-    /** 插件数据目录内的静态资源目录 */
+    /** 静态资源根目录（绝对路径），默认为插件目录的 www */
     readonly wwwDir: string
     /** 找不到文件时回退 index.html */
     readonly spaFallback: boolean
     /** 信任网关头时校验的 Host 主机名（DNS rebinding） */
     readonly allowedHosts: readonly string[]
+    /** 会话与请求体限额 */
+    readonly limits: ChatLimits
 }
 
 /** 默认只信任 loopback 主机名 */
@@ -24,10 +30,14 @@ export const DEFAULT_WEB_CONFIG: WebConfig = {
     host: "127.0.0.1",
     port: 8787,
     routePrefix: "/web",
-    wwwDir: "www",
-    spaFallback: false,
+    wwwDir: PLUGIN_WWW_DIR,
+    spaFallback: true,
     allowedHosts: DEFAULT_ALLOWED_HOSTS,
+    limits: DEFAULT_CHAT_LIMITS,
 }
+
+/** 宿主 HTTP 层的请求体上限 */
+const HOST_MAX_BODY_BYTES = 16 * 1024 * 1024
 
 export interface ParsedWebConfig {
     readonly config: WebConfig
@@ -95,12 +105,52 @@ function parseAllowedHosts(value: unknown, warnings: string[]): readonly string[
     return hosts
 }
 
+function isAbsolutePath(value: string): boolean {
+    return value.startsWith("/") || /^[A-Za-z]:[\\/]/.test(value) || value.startsWith("\\\\")
+}
+
 function normalizeWwwDir(value: string): string | null {
-    const trimmed = value.trim().replace(/^\/+/, "").replace(/\/+$/, "")
-    if (trimmed === "" || trimmed.includes("..") || trimmed.includes("\\")) {
+    const trimmed = value.trim()
+    if (trimmed === "" || !isAbsolutePath(trimmed) || trimmed.includes("\0")) {
         return null
     }
-    return trimmed
+    const normalized = trimmed.replace(/[\\/]+$/, "")
+    return normalized === "" ? null : normalized
+}
+
+type LimitKey = keyof ChatLimits
+
+const LIMIT_BOUNDS: Readonly<Record<LimitKey, readonly [number, number]>> = {
+    maxMessageChars: [1, 1_000_000],
+    maxReferences: [0, 1_000],
+    maxBodyBytes: [1_024, HOST_MAX_BODY_BYTES],
+    maxConversations: [1, 10_000],
+    maxConversationChars: [1_000, 100_000_000],
+    turnBufferChars: [1_024, 64 * 1024 * 1024],
+}
+
+function parseLimits(value: unknown, warnings: string[]): ChatLimits {
+    if (value === undefined) {
+        return DEFAULT_CHAT_LIMITS
+    }
+    if (!isObject(value)) {
+        warnings.push("limits 不是对象")
+        return DEFAULT_CHAT_LIMITS
+    }
+    const limits: Record<LimitKey, number> = { ...DEFAULT_CHAT_LIMITS }
+    for (const key of Object.keys(LIMIT_BOUNDS) as LimitKey[]) {
+        const raw = value[key]
+        if (raw === undefined) {
+            continue
+        }
+        const bounds = LIMIT_BOUNDS[key]
+        if (typeof raw !== "number" || !Number.isInteger(raw) || raw < bounds[0] || raw > bounds[1]) {
+            warnings.push(`limits.${key} 不合法：${String(raw)}`)
+            continue
+        }
+        limits[key] = raw
+    }
+    return limits
 }
 
 export function parseWebConfig(raw: unknown): ParsedWebConfig {
@@ -130,7 +180,7 @@ export function parseWebConfig(raw: unknown): ParsedWebConfig {
 
     const rawWww = typeof input["wwwDir"] === "string" ? normalizeWwwDir(input["wwwDir"]) : null
     if (input["wwwDir"] !== undefined && rawWww === null) {
-        warnings.push(`wwwDir 不合法：${String(input["wwwDir"])}`)
+        warnings.push(`wwwDir 不是绝对路径：${String(input["wwwDir"])}`)
     }
 
     const spaFallback = input["spaFallback"]
@@ -146,6 +196,7 @@ export function parseWebConfig(raw: unknown): ParsedWebConfig {
             wwwDir: rawWww ?? defaults.wwwDir,
             spaFallback: typeof spaFallback === "boolean" ? spaFallback : defaults.spaFallback,
             allowedHosts: parseAllowedHosts(input["allowedHosts"], warnings),
+            limits: parseLimits(input["limits"], warnings),
         },
         warnings,
     }

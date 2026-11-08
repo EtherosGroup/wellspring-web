@@ -52,6 +52,12 @@ jobs:
             - name: 测试
               run: npm test
 
+            - name: 确认前端产物已提交
+              run: |
+                  set -euo pipefail
+                  test -f www/index.html
+                  ls www/assets
+
             - name: 打包插件
               run: npm run build:zip
 

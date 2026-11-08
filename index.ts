@@ -1,33 +1,66 @@
-import type { HttpRequest, PluginApi } from "wellspring/api/host/index.ts"
-import { EventEntity, eventBus, onShutdown } from "wellspring/api/host/index.ts"
+import type {
+    HttpRequest,
+    HttpServerHandle,
+    PluginApi,
+} from "wellspring/api/host/index.ts"
+import {
+    EventEntity,
+    eventBus,
+    getHost,
+    onShutdown,
+    SANDBOX_PREPARE_EVENT,
+    type SandboxPrepareEvent,
+} from "wellspring/api/host/index.ts"
 
-import { ensureWww } from "./src/assets.ts"
+import { ChatRuntime } from "./src/chat-runtime.ts"
+import { ChatStore } from "./src/chat-store.ts"
 import { parseWebConfig } from "./src/config.ts"
+import { createRouter } from "./src/router.ts"
 import { checkSession, gatewayHostTrusted } from "./src/session.ts"
 import { createSsoClient, readSsoDiscovery, type SsoClient } from "./src/sso-client.ts"
-import { serveStatic, type StaticOptions } from "./src/static.ts"
 
 const GATEWAY_REGISTER = "wellspring-gateway:upstream:register"
 const GATEWAY_UNREGISTER = "wellspring-gateway:upstream:unregister"
 const HEALTH_PATH = "/__web/health"
-const VERSION = "0.3.0"
+const VERSION = "0.4.0"
 
 /** 直连端口的会话校验模式：gateway 校验网关会话，disabled 网关鉴权已关闭，off 无网关发现文件，unavailable 发现文件异常 */
 type SsoMode = "gateway" | "disabled" | "off" | "unavailable"
 
+function requestPath(url: string): string {
+    try {
+        return new URL(url, "http://localhost").pathname
+    } catch {
+        return "/"
+    }
+}
+
+function errorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error)
+}
+
 export function setup() {
-    let server: { readonly host: string; readonly port: number; close(): Promise<void> } | null = null
+    let server: HttpServerHandle | null = null
+    let runtime: ChatRuntime | null = null
+    let unsubscribePrepare: (() => void) | null = null
 
     onShutdown(async () => {
+        const stopPreparing = unsubscribePrepare
+        unsubscribePrepare = null
+        stopPreparing?.()
         eventBus.publish(GATEWAY_UNREGISTER, EventEntity.create({ name: "wellspring-web" }))
-        await server?.close()
+        const currentRuntime = runtime
+        runtime = null
+        await currentRuntime?.dispose().catch(() => undefined)
+        const currentServer = server
         server = null
+        await currentServer?.close().catch(() => undefined)
     })
 
     return {
         id: "wellspring-web",
         name: "Wellspring Web",
-        description: "网页界面：从插件数据目录 www/ 下发静态资源，经 wellspring-gateway 统一入口访问",
+        description: "网页界面：在浏览器里与 Agent 对话，经 wellspring-gateway 统一入口访问",
         version: VERSION,
         status: "ok" as const,
         deps: ["wellspring-gateway"],
@@ -35,17 +68,6 @@ export function setup() {
             const { config, warnings } = parseWebConfig(api.pluginConfig)
             for (const warning of warnings) {
                 api.logger.warn({ warning }, "网页配置项被忽略")
-            }
-            const seeded = await ensureWww(api.fs, config.wwwDir)
-            if (seeded.created.length > 0) {
-                api.logger.info(
-                    { dir: config.wwwDir, created: seeded.created },
-                    "已写入默认 www 资源",
-                )
-            }
-            const staticOptions: StaticOptions = {
-                root: config.wwwDir,
-                spaFallback: config.spaFallback,
             }
             if (!["127.0.0.1", "localhost", "::1", "[::1]"].includes(config.host)) {
                 api.logger.warn(
@@ -72,7 +94,10 @@ export function setup() {
             } else if (discovery.version !== 1) {
                 failClosed = true
                 ssoMode = "unavailable"
-                api.logger.error({ version: discovery.version }, "网关 SSO 发现文件版本不支持，直连端口拒绝服务")
+                api.logger.error(
+                    { version: discovery.version },
+                    "网关 SSO 发现文件版本不支持，直连端口拒绝服务",
+                )
             } else if (!discovery.authEnabled) {
                 ssoMode = "disabled"
             } else {
@@ -96,24 +121,63 @@ export function setup() {
                     failClosed = true
                     ssoMode = "unavailable"
                     api.logger.error(
-                        { error: error instanceof Error ? error.message : String(error) },
+                        { error: errorMessage(error) },
                         "网关 SSO 客户端初始化失败，直连端口拒绝服务",
                     )
                 }
             }
 
-            const handle = await api.http.createServer(
-                { host: config.host, port: config.port },
-                async (request: HttpRequest) => {
-                    const startedAt = Date.now()
-                    const host = request.headers["host"] ?? ""
-                    const viaGateway = request.headers["x-wellspring-gateway"] === "1"
-                    let path = "/"
+            const store = new ChatStore({
+                fs: api.fs,
+                limits: config.limits,
+                logger: api.logger,
+            })
+            try {
+                await store.load()
+            } catch (error) {
+                api.logger.error({ error: errorMessage(error) }, "会话索引加载失败")
+            }
+            runtime = new ChatRuntime({
+                agent: api.agent,
+                store,
+                limits: config.limits,
+                logger: api.logger,
+            })
+            const activeRuntime = runtime
+            /* 沙盒准备进度从事件总线转进当前轮次的流 */
+            unsubscribePrepare = eventBus.subscribe<SandboxPrepareEvent>(
+                SANDBOX_PREPARE_EVENT,
+                (event) => {
+                    activeRuntime.injectSandboxPrepare(event.getData())
+                },
+            )
+            const router = createRouter({
+                api,
+                config,
+                store,
+                runtime,
+                version: VERSION,
+                hostInfo: () => {
                     try {
-                        path = new URL(request.url, "http://localhost").pathname
+                        const host = getHost()
+                        const os = host.getOS()
+                        return {
+                            status: host.getStatus(),
+                            platform: os.platform,
+                            arch: os.arch,
+                            node: os.node,
+                            cwd: os.cwd,
+                        }
                     } catch {
-                        /* 交给静态服务返回 400 */
+                        return null
                     }
+                },
+            })
+
+            server = await api.http.createServer(
+                { host: config.host, port: config.port },
+                async (request: HttpRequest, stream) => {
+                    const path = requestPath(request.url)
                     if (path === HEALTH_PATH) {
                         if (request.method !== "GET" && request.method !== "HEAD") {
                             return {
@@ -125,88 +189,66 @@ export function setup() {
                                 body: "不支持的请求方法",
                             }
                         }
+                        const user =
+                            request.headers["x-wellspring-gateway"] === "1" &&
+                            gatewayHostTrusted(request, config.allowedHosts)
+                                ? (request.headers["x-wellspring-user"] ?? null)
+                                : null
                         return {
                             status: 200,
                             headers: { "content-type": "application/json; charset=utf-8" },
                             body: JSON.stringify({
                                 status: "ok",
-                                user:
-                                    request.headers["x-wellspring-gateway"] === "1" &&
-                                    gatewayHostTrusted(request, config.allowedHosts)
-                                        ? request.headers["x-wellspring-user"] ?? null
-                                        : null,
+                                version: VERSION,
+                                user,
                                 sso: ssoMode,
                                 allowedHosts: [...config.allowedHosts],
                             }),
                         }
                     }
-                    if (!viaGateway) {
-                        api.logger.info(
-                            {
-                                host,
-                                method: request.method,
-                                url: request.url,
-                                cookie: request.headers["cookie"] !== undefined,
-                            },
-                            "直连请求",
-                        )
-                    }
+
                     const session = await checkSession(request, sso, {
                         allowedHosts: config.allowedHosts,
                         failClosed,
                     })
                     if (!session.ok) {
-                        api.logger.info(
-                            {
-                                host,
-                                url: request.url,
-                                reason: session.reason,
-                                status: session.response.status,
-                                location: session.response.headers?.["location"] ?? null,
-                                durationMs: Date.now() - startedAt,
-                            },
-                            "直连会话未通过",
-                        )
                         return session.response
                     }
+
+                    /* 直连端口已校验会话，把用户名补进请求头副本；经网关时沿用已验证的头 */
+                    const authedRequest: HttpRequest =
+                        session.user === null
+                            ? request
+                            : {
+                                  ...request,
+                                  headers: { ...request.headers, "x-wellspring-user": session.user },
+                              }
                     try {
-                        const response = await serveStatic(request, api.fs, staticOptions)
-                        if (!viaGateway) {
-                            api.logger.info(
-                                {
-                                    host,
-                                    url: request.url,
-                                    status: response.status ?? 200,
-                                    user: session.user,
-                                    durationMs: Date.now() - startedAt,
-                                },
-                                "直连响应",
-                            )
-                        }
-                        return response
+                        return await router(authedRequest, stream)
                     } catch (error) {
                         api.logger.error(
-                            { error: error instanceof Error ? error.message : String(error) },
-                            "静态资源读取失败",
+                            { url: request.url, error: errorMessage(error) },
+                            "网页请求处理失败",
                         )
                         return {
                             status: 500,
-                            headers: { "content-type": "text/plain; charset=utf-8" },
-                            body: "读取静态资源失败",
+                            headers: { "content-type": "application/json; charset=utf-8" },
+                            body: JSON.stringify({ error: "服务器内部错误" }),
                         }
                     }
                 },
             )
-            server = handle
+
             eventBus.publish(
                 GATEWAY_REGISTER,
                 EventEntity.create({
                     name: "wellspring-web",
                     prefix: config.routePrefix,
-                    target: `http://${handle.host}:${handle.port}`,
+                    target: `http://${server.host}:${server.port}`,
                 }),
             )
-            api.output.info(`Web 界面监听 ${handle.host}:${handle.port}，网关路径 ${config.routePrefix}`)
+            api.output.info(`Web 界面监听 ${server.host}:${server.port}，网关路径 ${config.routePrefix}`)
         },
     }
 }
+
