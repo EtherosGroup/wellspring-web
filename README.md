@@ -1,4 +1,4 @@
-# @xyit-team/wellspring-web
+# @etheros/wellspring-web
 
 Wellspring 的网页对话界面插件：在浏览器里与 Agent 实时对话——流式回复、思考过程、工具调用、停止与插话、
 Agent 提问与提权审批、会话续接、模型/权限切换、工作区文件引用。
@@ -55,7 +55,7 @@ Agent 提问与提权审批、会话续接、模型/权限切换、工作区文�
 
 ```bash
 wellspring plugin link "$PWD"          # 本地开发
-# 或 wellspring plugin install npm:@xyit-team/wellspring-web
+# 或 wellspring plugin install npm:@etheros/wellspring-web
 
 wellspring start
 ```
