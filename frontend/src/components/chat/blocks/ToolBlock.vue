@@ -227,7 +227,7 @@ onBeforeUnmount(stopTimer)
     background: var(--surface-2);
     color: var(--ink-2);
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--text-xs);
     line-height: 1.6;
     white-space: pre-wrap;
     overflow-wrap: anywhere;

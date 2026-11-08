@@ -179,7 +179,7 @@ function decide(approved: boolean): void {
     background: var(--surface-2);
     color: var(--ink);
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--text-xs);
     line-height: 1.55;
     white-space: pre-wrap;
     overflow-wrap: anywhere;

@@ -363,7 +363,7 @@ function onRetry(): void {
     background: var(--surface-2);
     color: var(--faint);
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 0.625rem;
     line-height: 1.6;
 }
 

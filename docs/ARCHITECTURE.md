@@ -398,6 +398,8 @@ interface Actions {
   暗色：底 `#12130f`、面 `#1a1b16`、墨 `#ece9df`、次要 `#a39e90`、线 `#2c2d26`、主色 `#6fbfa4`。
 - 字体：界面 `system-ui` + 中文回退；品牌/空状态标题用衬线 `"Iowan Old Style", "Songti SC", Georgia, serif`；
   代码与元信息用 `ui-monospace, "JetBrains Mono", Consolas, monospace`。不请求网络字体。
+- 字号：正文基准 `1rem`（16px），全站字号令牌用 rem（`--text-xs`…`--text-4xl`）；
+  根字号由 `--ui-font-size`（默认 `1rem`）控制，改这一个变量即可整体缩放。
 - 形状：输入区/卡片 14–18px 圆角；按钮胶囊；阴影极浅；边框 1px 发丝线。
 - 动效：进入 120–180ms `cubic-bezier(.2,.7,.2,1)`，只用 transform/opacity；
   `prefers-reduced-motion` 全部关闭。

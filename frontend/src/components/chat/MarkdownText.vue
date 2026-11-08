@@ -310,7 +310,7 @@ function onClick(event: MouseEvent): void {
     padding: 12px 14px;
     overflow-x: auto;
     font-family: var(--font-mono);
-    font-size: 12.5px;
+    font-size: 0.78125rem;
     line-height: 1.65;
     tab-size: 4;
     color: var(--ink-2);
@@ -323,7 +323,7 @@ function onClick(event: MouseEvent): void {
 
     .md .md-code__pre {
         padding: 10px 12px;
-        font-size: 12px;
+        font-size: 0.75rem;
     }
 }
 </style>

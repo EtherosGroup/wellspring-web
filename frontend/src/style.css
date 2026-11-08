@@ -44,17 +44,18 @@
         ui-monospace, "JetBrains Mono", "Cascadia Code", "SF Mono", Menlo, Consolas,
         "Noto Sans Mono CJK SC", "DejaVu Sans Mono", monospace;
 
-    /* 字号 */
-    --text-2xs: 11px;
-    --text-xs: 12px;
-    --text-sm: 13px;
-    --text-base: 14px;
-    --text-md: 15px;
-    --text-lg: 17px;
-    --text-xl: 20px;
-    --text-2xl: 26px;
-    --text-3xl: 34px;
-    --text-4xl: 44px;
+    /* 字号：基准 1rem（16px），全部用 rem，改 --ui-font-size 可整体缩放 */
+    --ui-font-size: 1rem;
+    --text-2xs: 0.75rem;    /* 12px */
+    --text-xs: 0.8125rem;   /* 13px */
+    --text-sm: 0.875rem;    /* 14px */
+    --text-base: 1rem;      /* 16px，正文基准 */
+    --text-md: 1.0625rem;   /* 17px */
+    --text-lg: 1.125rem;    /* 18px */
+    --text-xl: 1.25rem;     /* 20px */
+    --text-2xl: 1.625rem;   /* 26px */
+    --text-3xl: 2.125rem;   /* 34px */
+    --text-4xl: 2.75rem;    /* 44px */
 
     /* 间距 */
     --space-1: 4px;
@@ -174,6 +175,7 @@ body {
 }
 
 html {
+    font-size: var(--ui-font-size);
     -webkit-text-size-adjust: 100%;
 }
 
@@ -465,7 +467,7 @@ svg {
     background: var(--surface);
     color: var(--faint);
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 0.625rem;
     line-height: 1;
 }
 
@@ -781,13 +783,6 @@ svg {
     .app__inspector {
         right: 0;
         animation: slide-in-right var(--dur) var(--ease);
-    }
-}
-
-@media (max-width: 640px) {
-    :root {
-        --text-base: 14px;
-        --text-md: 15px;
     }
 }
 
