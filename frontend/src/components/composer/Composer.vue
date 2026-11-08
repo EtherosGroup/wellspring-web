@@ -510,7 +510,12 @@ onBeforeUnmount(() => {
                     <span class="kbd">Shift</span><span class="kbd">Enter</span> 换行
                     <span class="composer__hint-item">@ 引用文件</span>
                 </span>
-                <span class="composer__hint composer__hint--count" :class="{ 'composer__hint--warn': nearLimit }">
+                <span
+                    v-if="store.draft.length > 0"
+                    class="composer__hint composer__hint--count"
+                    :class="{ 'composer__hint--warn': nearLimit }"
+                    :aria-label="`已输入 ${store.draft.length} 字`"
+                >
                     {{ store.draft.length }}<template v-if="nearLimit"> / {{ charLimit }}</template>
                 </span>
             </div>
