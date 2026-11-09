@@ -1,5 +1,5 @@
 {
-    "name": "@xyit/wellspring-web",
+    "name": "@etheros/wellspring-web",
     "version": "0.4.0",
     "description": "Wellspring 网页界面插件：在浏览器里与 Agent 对话（流式回复、会话续接、工具过程、提问与提权审批）",
     "license": "MIT",
@@ -39,7 +39,7 @@
     "wellspring": {
         "apiVersion": 1,
         "name": "wellspring-web",
-        "npm": "@xyit/wellspring-web",
+        "npm": "@etheros/wellspring-web",
         "github": "EtherosGroup/wellspring-web",
         "sandbox": {
             "profile": "plugin",
