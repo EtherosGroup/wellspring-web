@@ -1,6 +1,6 @@
 name: publish-npm
 
-# 发布到 npm：@etheros/wellspring-web@x.y.z
+# 发布到 npm：@xyit/wellspring-web@x.y.z
 # 认证走 npm Trusted Publishing（OIDC），仓库里不存 token
 on:
     push:
