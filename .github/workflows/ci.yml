@@ -19,36 +19,38 @@ jobs:
         steps:
             - uses: actions/checkout@v7
 
+            - uses: pnpm/action-setup@v6
+              with:
+                  version: 12.14.0
+
             - uses: actions/setup-node@v7
               with:
                   node-version: 24
+                  cache: pnpm
 
-            - name: 安装插件依赖（严格按 lockfile）
-              run: npm ci --no-audit --no-fund
-
-            - name: 安装前端依赖（严格按 lockfile）
-              run: npm --prefix frontend ci --no-audit --no-fund
+            - name: 安装依赖（严格按 lockfile，含前端 workspace）
+              run: pnpm install --frozen-lockfile
 
             - name: 插件类型检查
-              run: npm run typecheck
+              run: pnpm run typecheck
 
             - name: 前端类型检查
-              run: npm --prefix frontend run typecheck
+              run: pnpm -C frontend run typecheck
 
             - name: 构建前端并核对提交的 www 产物
               run: |
                   set -euo pipefail
-                  npm run build:ui
+                  pnpm run build:ui
                   if ! git diff --exit-code -- www; then
-                    echo "www/ 与前端源码不一致：本地跑 npm run build:ui 后提交产物。"
+                    echo "www/ 与前端源码不一致：本地跑 pnpm run build:ui 后提交产物。"
                     exit 1
                   fi
 
             - name: 测试
-              run: npm test
+              run: pnpm test
 
             - name: 打包插件 zip
-              run: npm run build:zip
+              run: pnpm run build:zip
 
             - name: 冒烟：zip 里必须有清单、入口、后端源码与前端产物
               run: |

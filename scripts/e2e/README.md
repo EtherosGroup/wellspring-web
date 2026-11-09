@@ -1,7 +1,7 @@
 # wellspring-web 端到端验证
 
 隔离宿主 + 可脚本化 stub 模型 + HTTP/SSE 用例 + headless Chrome 真实交互。
-只依赖 Node 原生模块，不新增 npm 依赖；不修改业务代码。
+只依赖 Node 原生模块，不新增依赖；不修改业务代码。
 
 ## 一键运行
 
@@ -9,7 +9,7 @@
 node scripts/e2e/run.mjs               # 全量（自动新建临时 home 与动态端口）
 node scripts/e2e/run.mjs --only BR1    # 只跑某组/某用例（id 前缀或名称包含）
 node scripts/e2e/run.mjs --no-browser  # 跳过浏览器检查
-node scripts/e2e/run.mjs --build-ui    # 先 npm run build:ui 再跑
+node scripts/e2e/run.mjs --build-ui    # 先 pnpm run build:ui 再跑
 node scripts/e2e/run.mjs --keep        # 保留临时 home 便于排查
 ```
 
@@ -33,7 +33,7 @@ node scripts/e2e/run.mjs --keep        # 保留临时 home 便于排查
 
 ```bash
 node scripts/e2e/harness.mjs          # 起实例并打印直连/网关地址，Ctrl+C 清理
-npm run build:ui                      # 前端有改动时重建 www/
+pnpm run build:ui                     # 前端有改动时重建 www/
 ```
 
 ## 用例标记（stub 模型）

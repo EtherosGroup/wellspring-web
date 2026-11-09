@@ -28,12 +28,17 @@ jobs:
                   ref: ${{ inputs.tag || github.ref }}
                   fetch-depth: 0
 
+            - uses: pnpm/action-setup@v6
+              with:
+                  version: 12.14.0
+
             - uses: actions/setup-node@v7
               with:
                   node-version: 24
+                  cache: pnpm
 
-            - name: 安装依赖（严格按 lockfile）
-              run: npm ci --no-audit --no-fund
+            - name: 安装依赖（严格按 lockfile，含前端 workspace）
+              run: pnpm install --frozen-lockfile
 
             - name: 核对标签与 package.json 的版本
               env:
@@ -47,10 +52,10 @@ jobs:
                   fi
 
             - name: 类型检查
-              run: npm run typecheck
+              run: pnpm run typecheck
 
             - name: 测试
-              run: npm test
+              run: pnpm test
 
             - name: 确认前端产物已提交
               run: |
@@ -59,7 +64,7 @@ jobs:
                   ls www/assets
 
             - name: 打包插件
-              run: npm run build:zip
+              run: pnpm run build:zip
 
             - name: 生成校验和
               run: |

@@ -6,7 +6,7 @@
  * 常用参数：
  *   --only S1,D1    只跑指定 id 前缀或名称包含的用例
  *   --no-browser    跳过浏览器检查
- *   --build-ui      运行前先 npm run build:ui 重建 www/
+ *   --build-ui      运行前先 pnpm run build:ui 重建 www/
  *   --keep          结束后保留临时 home
  *   --no-clean      结束后保留临时 home（同 --keep）
  *   --report <file> 报告路径（默认 /tmp/e2e-report.md）
@@ -1932,8 +1932,8 @@ async function buildUiIfRequested() {
     if (!options.buildUi) {
         return
     }
-    console.log("[准备] npm run build:ui …")
-    const result = spawnSync("npm", ["run", "build:ui"], { cwd: REPO_ROOT, encoding: "utf8", timeout: 180_000 })
+    console.log("[准备] pnpm run build:ui …")
+    const result = spawnSync("pnpm", ["run", "build:ui"], { cwd: REPO_ROOT, encoding: "utf8", timeout: 180_000 })
     if (result.status !== 0) {
         console.error("[准备] 前端构建失败（继续用现有 www/）：")
         console.error((result.stdout ?? "").slice(-1_500))

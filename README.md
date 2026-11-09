@@ -175,11 +175,14 @@ wellspring start
 前端源码在 `frontend/`，构建产物输出到仓库根目录 `www/`，并**提交到仓库**（插件运行时从插件包读取）。
 
 ```bash
-npm --prefix frontend install
-npm --prefix frontend run dev        # Vite 开发服务器，/api 代理到 127.0.0.1:8787
-npm --prefix frontend run typecheck
-npm run build:ui                     # 构建到 www/（提交这个产物）
+pnpm install                         # 根目录一次装完插件与前端 workspace 依赖
+pnpm -C frontend run dev             # Vite 开发服务器，/api 代理到 127.0.0.1:8787
+pnpm -C frontend run typecheck
+pnpm run build:ui                    # 构建到 www/（提交这个产物）
 ```
+
+项目使用 pnpm（根 `pnpm-workspace.yaml` 把 `frontend/` 作为子包，单份 `pnpm-lock.yaml`）。
+需要 pnpm >= 11（`allowBuilds` 配置语义；CI 与开发基线是 12.14.0），Node >= 24。
 
 - 开发服务器同样需要登录态：先经网关登录，再访问 `http://localhost:5178/`；
   或在网关配置里为开发端口放行（auth 关闭时最省事）
@@ -191,15 +194,15 @@ npm run build:ui                     # 构建到 www/（提交这个产物）
 ## 构建、测试与发布
 
 ```bash
-npm install
-npm run typecheck        # 插件 TS
-npm test                 # 后端单测（node --test）
-npm run build:ui         # 前端 → www/
-npm run build:zip        # release/wellspring-web-<version>.zip（含 www/）
+pnpm install --frozen-lockfile
+pnpm run typecheck       # 插件 TS
+pnpm test                # 后端单测（node --test）
+pnpm run build:ui        # 前端 → www/
+pnpm run build:zip       # release/wellspring-web-<version>.zip（含 www/）
 ```
 
-CI（`.github/workflows/ci.yml`）：插件与前端类型检查、构建前端并校验 `www/` 与源码一致、
-后端单测、打 zip 并冒烟检查产物。
+CI（`.github/workflows/ci.yml`）：pnpm 安装（lockfile 冻结）、插件与前端类型检查、构建前端并校验
+`www/` 与源码一致、后端单测、打 zip 并冒烟检查产物。
 
 发布：改 `package.json` 的 version，提交后推同名 tag：
 

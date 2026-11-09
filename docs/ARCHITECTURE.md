@@ -414,13 +414,13 @@ interface Actions {
 ## 9. 构建与验证
 
 ```bash
-npm test                 # 后端单测（node --test）
-npm run typecheck        # 插件 TS
-npm run build:ui         # 前端构建 → www/
-npm run build:zip        # release/wellspring-web-<version>.zip（含 www/）
+pnpm test                # 后端单测（node --test）
+pnpm run typecheck       # 插件 TS
+pnpm run build:ui        # 前端构建 → www/
+pnpm run build:zip       # release/wellspring-web-<version>.zip（含 www/）
 ```
 
-CI 会增加：前端 `npm ci && npm run build`、`git diff --exit-code www`（产物必须与源码一致）。
+CI：`pnpm install --frozen-lockfile`、前端 `pnpm run build:ui`、`git diff --exit-code www`（产物必须与源码一致）。
 
 端到端验证（verify 负责）：用 `wellspring --home <tmp> start` 起隔离实例（不同端口、gateway 关鉴权），
 配一个本地 OpenAI 兼容 stub（SSE 流式返回固定内容），真实跑完：

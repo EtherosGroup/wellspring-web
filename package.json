@@ -27,7 +27,7 @@
     "scripts": {
         "typecheck": "tsc --noEmit",
         "test": "node scripts/run-tests.mjs",
-        "build:ui": "npm --prefix frontend run build",
+        "build:ui": "pnpm -C frontend run build",
         "build:zip": "node scripts/build-zip.mjs"
     },
     "devDependencies": {
