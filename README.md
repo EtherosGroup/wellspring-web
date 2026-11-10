@@ -44,6 +44,12 @@ wellspring start
 └── ...（你自己的页面、脚本、样式、静态资源）
 ```
 
+两种用法：
+
+- **直接写文件**：把任何静态站点放进去即可，改完刷新生效
+- **用仓库自带的前端**：`frontend/` 是 Vue 3 + TypeScript + SCSS 的 Vite 起始项目，
+  开发用 `pnpm dev:ui`，构建后 `pnpm sync:web` 把 `frontend/dist` 同步到上面的目录（见「开发」）
+
 - 首次启动时如果 `www/` 不存在或缺少 `index.html`，写入一份占位页；**已存在的文件不会被覆盖**
 - 每次请求都读盘，改完刷新即生效，不需要重启插件
 - 经网关访问时页面在 `/web/` 前缀下：页面内静态引用建议用相对路径（`./app.js`）或自行处理前缀；
@@ -125,16 +131,37 @@ wellspring plugin link "$PWD"
 wellspring start
 ```
 
+### 前端（`frontend/`）
+
+仓库自带一个 Vue 3 + Vite 起始项目：TypeScript、SCSS（`src/styles/`），
+**没有**安装 Vue DevTools 插件（`vite-plugin-vue-devtools`）。
+
+```bash
+pnpm install              # 根目录安装，包含 frontend workspace（单份 pnpm-lock.yaml）
+pnpm dev:ui               # http://127.0.0.1:5178/，/__web 与 /api 代理到 127.0.0.1:8787
+pnpm typecheck:ui
+pnpm build:ui             # 构建到 frontend/dist
+pnpm sync:web             # 同步 frontend/dist → <dataDir>/plugin-data/wellspring-web/www
+pnpm sync:web --clean     # 先清空目标目录再同步（产物带 hash 时推荐）
+```
+
+- 开发服务器依赖插件后端：先 `wellspring start` 并经网关登录；浏览器用 `127.0.0.1:5178`
+  访问（会话 cookie 是 host-only，`localhost` 不互通）
+- 构建用相对 base：同一份产物可直连 `8787`，也可经网关 `/web/` 访问（地址要带尾斜杠）
+- 加依赖用 `pnpm -C frontend add <pkg>`，不要混用 npm/yarn（pnpm workspace 只有一份 lockfile）
+
 ### 目录结构
 
 ```text
-index.ts            插件入口：HTTP 服务、网关注册、会话校验、静态下发
-src/config.ts       配置解析
-src/assets.ts       www 目录与占位页
-src/static.ts       静态文件服务
-src/session.ts      会话校验（网关头信任 + 直连 cookie 校验）
-src/sso-client.ts   网关 SSO 快照校验（与网关同步复制）
-test/               单测
+index.ts             插件入口：HTTP 服务、网关注册、会话校验、静态下发
+src/config.ts        配置解析
+src/assets.ts        www 目录与占位页
+src/static.ts        静态文件服务
+src/session.ts       会话校验（网关头信任 + 直连 cookie 校验）
+src/sso-client.ts    网关 SSO 快照校验（与网关同步复制）
+test/                单测
+frontend/            Vue 3 + TS + SCSS 起始前端（不进入插件包）
+scripts/sync-web.mjs 把 frontend/dist 同步到插件数据目录
 ```
 
 ## 安全与限制
@@ -150,3 +177,5 @@ test/               单测
 
 - `0.5.0`：移除 0.4.0 的对话界面与全部业务逻辑（chat 存储、SSE、API、前端构建），
   只保留网关连接、登录态复用与静态资源下发；包名保持 `@etheros/wellspring-web`
+- 仓库另带 `frontend/` Vue 3 + TypeScript + SCSS 起始前端与 `pnpm sync:web` 部署脚本，
+  不进入插件 zip / npm 包

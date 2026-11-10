@@ -1,0 +1,23 @@
+// 设计令牌：颜色 / 字体 / 圆角。页面统一用这些变量，方便整体换肤
+$font-sans:
+    system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei',
+    'Noto Sans CJK SC', sans-serif;
+$font-mono: ui-monospace, 'JetBrains Mono', Consolas, 'Noto Sans Mono CJK SC', monospace;
+
+$color-bg: #f6f3ec;
+$color-surface: #fffdf8;
+$color-ink: #1d1b17;
+$color-muted: #6f6a5f;
+$color-line: #e2dcd0;
+$color-accent: #1f6f5c;
+
+$radius-sm: 8px;
+$radius-md: 14px;
+
+// 暗色主题：页面里用 @media (prefers-color-scheme: dark) 覆盖
+$color-bg-dark: #12130f;
+$color-surface-dark: #1a1b16;
+$color-ink-dark: #ece9df;
+$color-muted-dark: #a39e90;
+$color-line-dark: #2c2d26;
+$color-accent-dark: #6fbfa4;

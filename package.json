@@ -28,7 +28,11 @@
     "scripts": {
         "typecheck": "tsc --noEmit",
         "test": "node scripts/run-tests.mjs",
-        "build:zip": "node scripts/build-zip.mjs"
+        "build:zip": "node scripts/build-zip.mjs",
+        "dev:ui": "pnpm -C frontend run dev",
+        "build:ui": "pnpm -C frontend run build",
+        "typecheck:ui": "pnpm -C frontend run typecheck",
+        "sync:web": "node scripts/sync-web.mjs"
     },
     "devDependencies": {
         "@types/node": "^26.6.5",
@@ -47,7 +51,12 @@
                 "read": [],
                 "write": []
             },
-            "hostApi": ["logger", "fs", "http", "event"]
+            "hostApi": [
+                "logger",
+                "fs",
+                "http",
+                "event"
+            ]
         }
     }
 }

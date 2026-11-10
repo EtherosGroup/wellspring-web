@@ -1,4 +1,8 @@
-# pnpm 配置（单包仓库；pnpm 11+ 的 allowBuilds 写在这里）
+# pnpm 工作区：插件本体 + 前端（Vite + Vue 3）
+packages:
+    - frontend
+
 # node-pty 是 @xyit/wellspring 的可选依赖，本插件不需要原生编译
 allowBuilds:
     node-pty: false
+    "@parcel/watcher": false

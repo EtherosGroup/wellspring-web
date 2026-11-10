@@ -1,0 +1,49 @@
+@use './tokens' as *;
+
+:root {
+    color-scheme: light dark;
+    font-family: $font-sans;
+    font-size: 16px;
+    line-height: 1.6;
+    color: $color-ink;
+    background: $color-bg;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+    min-height: 100%;
+}
+
+body {
+    margin: 0;
+}
+
+code {
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 6%);
+    font-family: $font-mono;
+    font-size: 0.9em;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        color: $color-ink-dark;
+        background: $color-bg-dark;
+    }
+
+    code {
+        background: rgba(255, 255, 255, 8%);
+    }
+}

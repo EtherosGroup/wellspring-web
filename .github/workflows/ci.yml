@@ -31,8 +31,14 @@ jobs:
             - name: 安装依赖（严格按 lockfile）
               run: pnpm install --frozen-lockfile
 
-            - name: 类型检查
+            - name: 插件类型检查
               run: pnpm run typecheck
+
+            - name: 前端类型检查
+              run: pnpm -C frontend run typecheck
+
+            - name: 前端构建
+              run: pnpm -C frontend run build
 
             - name: 测试
               run: pnpm test

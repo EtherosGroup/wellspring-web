@@ -1,3 +1,8 @@
 node_modules/
+.pnpm-store/
 release/
 .idea/
+.cache-tmp/
+
+# 前端（Vue 3 + Vite）：构建产物
+frontend/dist/
