@@ -1,16 +1,12 @@
 /*
  * 静态文件服务
  *
- * 根目录是插件自带的 www/（运行时 /plugin/www）；路径做归一化，隐藏文件与越界路径不对外
- * HTML 注入主题 cookie 与 <base href>（网关路径前缀），hashed assets 长缓存，其余资源短缓存
+ * 根目录是插件数据目录内的 www/；路径做归一化，隐藏文件与越界路径不对外
  */
 
 import { posix } from "node:path"
 
 import type { HttpRequest, HttpResponse } from "wellspring/api/host/index.ts"
-
-import { applyThemeTemplate, MISSING_WWW_HTML, THEME_COOKIE } from "./assets.ts"
-import { applySecurityHeaders, cookieValue, SECURITY_HEADERS } from "./security.ts"
 
 export interface StaticFileStat {
     readonly type: "file" | "directory" | "other"
@@ -24,7 +20,7 @@ export interface StaticFileSystem {
 }
 
 export interface StaticOptions {
-    /** 静态资源根目录（绝对路径） */
+    /** 插件数据目录内的资源目录，例如 www */
     readonly root: string
     /** 找不到文件时回退 index.html */
     readonly spaFallback: boolean
@@ -56,7 +52,7 @@ const MIME_TYPES: Readonly<Record<string, string>> = {
     webmanifest: "application/manifest+json",
 }
 
-const TEXTUAL_TYPES: ReadonlySet<string> = new Set([
+const TEXTUAL_TYPES = new Set([
     "text/html",
     "text/css",
     "text/plain",
@@ -68,14 +64,17 @@ const TEXTUAL_TYPES: ReadonlySet<string> = new Set([
     "image/svg+xml",
 ])
 
-/** hashed 资源：assets/ 下带 8 位以上 hash 后缀的文件名 */
-const HASHED_ASSET = /^assets\/.*-[A-Za-z0-9_-]{8,}\.[A-Za-z0-9]+$/
-
-/** index.html 模板缓存；按 fs 实例隔离，测试互不污染 */
-const htmlTemplates = new WeakMap<StaticFileSystem, Map<string, { signature: string; template: string }>>()
-
-function trimRoot(root: string): string {
-    return root.replace(/[\\/]+$/, "")
+function textResponse(status: number, body: string, headers: Record<string, string> = {}): HttpResponse {
+    return {
+        status,
+        headers: {
+            "content-type": "text/plain; charset=utf-8",
+            "content-length": String(Buffer.byteLength(body)),
+            "cache-control": "no-store",
+            ...headers,
+        },
+        body,
+    }
 }
 
 function extensionOf(path: string): string {
@@ -88,95 +87,8 @@ function mimeOf(path: string): string {
     return MIME_TYPES[extensionOf(path)] ?? "application/octet-stream"
 }
 
-function isTextual(mime: string): boolean {
-    return TEXTUAL_TYPES.has(mime)
-}
-
-function cacheControlFor(rel: string, mime: string): string {
-    if (mime === "text/html") {
-        return "no-store"
-    }
-    return HASHED_ASSET.test(rel) ? "public, max-age=31536000, immutable" : "public, max-age=300"
-}
-
-function textResponse(status: number, text: string, headers: Record<string, string> = {}): HttpResponse {
-    return applySecurityHeaders({
-        status,
-        headers: {
-            "content-type": "text/plain; charset=utf-8",
-            "content-length": String(Buffer.byteLength(text)),
-            "cache-control": "no-store",
-            ...headers,
-        },
-        body: text,
-    })
-}
-
-function htmlResponse(status: number, html: string): HttpResponse {
-    return applySecurityHeaders(
-        {
-            status,
-            headers: {
-                "content-type": "text/html; charset=utf-8",
-                "content-length": String(Buffer.byteLength(html)),
-                "cache-control": "no-store",
-                vary: "cookie",
-                ...SECURITY_HEADERS,
-            },
-            body: html,
-        },
-        { html: true },
-    )
-}
-
-/** 前端产物缺失时的提示页 */
-function missingWwwResponse(): HttpResponse {
-    return htmlResponse(503, MISSING_WWW_HTML)
-}
-
-/** 网关注入的路径前缀允许的字符；不含百分号编码与反斜杠 */
-const FORWARDED_PREFIX = /^\/[A-Za-z0-9._~/-]*$/
-const MAX_PREFIX_CHARS = 256
-const BASE_TAG = /<base\b[^>]*>/i
-const BASE_HEAD = /<head\b[^>]*>/i
-
-/**
- * 请求对应的页面 base 路径
- *
- * 网关 proxy 带 x-forwarded-prefix（如 /web）；直连端口没有该头，base 为 /
- * 前缀按字面校验，去掉 . 与 .. 段后补尾斜杠
- */
-export function baseHrefOf(request: HttpRequest): string {
-    const raw = (request.headers["x-forwarded-prefix"] ?? "").split(",")[0]?.trim() ?? ""
-    if (raw === "" || raw.length > MAX_PREFIX_CHARS || !FORWARDED_PREFIX.test(raw)) {
-        return "/"
-    }
-    const segments = raw.split("/").filter((segment) => segment !== "" && segment !== "." && segment !== "..")
-    return segments.length === 0 ? "/" : `/${segments.join("/")}/`
-}
-
-/**
- * 把 index.html 的 <base href> 换成本次请求的 base
- *
- * 模板带 <base href="./" /> 占位时替换属性值，不追加第二个标签
- * 模板没有 base 时在 <head> 后补一个（旧构建产物）
- */
-export function injectBaseHref(html: string, base: string): string {
-    const tag = BASE_TAG.exec(html)
-    if (tag !== null) {
-        const original = tag[0]
-        let replaced = original.replace(/\bhref\s*=\s*"[^"]*"/i, `href="${base}"`)
-        if (replaced === original) {
-            replaced = original.replace(/^<base\b/i, `<base href="${base}"`)
-        }
-        return html.slice(0, tag.index) + replaced + html.slice(tag.index + original.length)
-    }
-    const head = BASE_HEAD.exec(html)
-    if (head === null) {
-        return html
-    }
-    const index = head.index + head[0].length
-    return `${html.slice(0, index)}\n<base href="${base}" />${html.slice(index)}`
+function cacheControlFor(path: string): string {
+    return extensionOf(path) === "html" ? "no-cache" : "public, max-age=300"
 }
 
 function acceptsHtml(request: HttpRequest): boolean {
@@ -208,7 +120,6 @@ function isHidden(rel: string): boolean {
 
 interface ResolvedFile {
     readonly file: string
-    readonly rel: string
     readonly stat: StaticFileStat
 }
 
@@ -229,7 +140,7 @@ async function resolveTarget(
         return null
     }
     if (stat.type === "file") {
-        return { file: path, rel: clean, stat }
+        return { file: path, stat }
     }
     if (stat.type !== "directory") {
         return null
@@ -240,30 +151,7 @@ async function resolveTarget(
     }
     const indexPath = clean === "" ? `${root}/index.html` : `${path}/index.html`
     const indexStat = await fs.stat(indexPath)
-    return indexStat !== null && indexStat.type === "file"
-        ? { file: indexPath, rel: `${clean === "" ? "" : `${clean}/`}index.html`, stat: indexStat }
-        : null
-}
-
-/** index.html 模板：按文件 stat 签名缓存，{{theme}} 每次请求替换 */
-function templateOf(fs: StaticFileSystem, file: string, stat: StaticFileStat, bytes: Uint8Array): string {
-    let cache = htmlTemplates.get(fs)
-    if (cache === undefined) {
-        cache = new Map()
-        htmlTemplates.set(fs, cache)
-    }
-    const signature = `${stat.size}:${Math.floor(stat.mtimeMs)}`
-    const cached = cache.get(file)
-    if (cached !== undefined && cached.signature === signature) {
-        return cached.template
-    }
-    const template = Buffer.from(bytes).toString("utf8")
-    cache.set(file, { signature, template })
-    return template
-}
-
-function themeOf(request: HttpRequest): string {
-    return cookieValue(request, THEME_COOKIE) ?? ""
+    return indexStat !== null && indexStat.type === "file" ? { file: indexPath, stat: indexStat } : null
 }
 
 async function sendFile(
@@ -276,46 +164,37 @@ async function sendFile(
     if (bytes === null) {
         return textResponse(404, "未找到")
     }
-    const mime = mimeOf(file.file)
-    if (mime === "text/html") {
-        const template = templateOf(fs, file.file, file.stat, bytes)
-        const html = injectBaseHref(
-            applyThemeTemplate(template, themeOf(request)),
-            baseHrefOf(request),
-        )
-        const response = htmlResponse(200, html)
-        return headOnly ? { ...response, body: "" } : response
-    }
     const etag = `W/"${file.stat.size}-${Math.floor(file.stat.mtimeMs)}"`
-    const cacheControl = cacheControlFor(file.rel, mime)
     const ifNoneMatch = request.headers["if-none-match"]
     if (typeof ifNoneMatch === "string") {
         const candidates = ifNoneMatch.split(",").map((value) => value.trim())
         if (candidates.includes(etag)) {
-            return applySecurityHeaders({
+            return {
                 status: 304,
-                headers: { etag, "cache-control": cacheControl },
+                headers: { etag, "cache-control": cacheControlFor(file.file) },
                 body: "",
-            })
+            }
         }
     }
-    const textual = isTextual(mime)
+    const mime = mimeOf(file.file)
+    const textual = TEXTUAL_TYPES.has(mime)
     const headers: Record<string, string> = {
         "content-type": textual ? `${mime}; charset=utf-8` : mime,
         "content-length": String(bytes.length),
-        "cache-control": cacheControl,
+        "cache-control": cacheControlFor(file.file),
         etag,
+        "x-content-type-options": "nosniff",
     }
     if (headOnly) {
-        return applySecurityHeaders({ status: 200, headers, body: "" })
+        return { status: 200, headers, body: "" }
     }
     const body = textual ? Buffer.from(bytes).toString("utf8") : Buffer.from(bytes).toString("base64")
-    return applySecurityHeaders({
+    return {
         status: 200,
         headers,
         body,
         ...(textual ? {} : { bodyEncoding: "base64" as const }),
-    })
+    }
 }
 
 export async function serveStatic(
@@ -340,29 +219,19 @@ export async function serveStatic(
     if (isHidden(rel)) {
         return textResponse(404, "未找到")
     }
-    const root = trimRoot(options.root)
     const headOnly = method === "HEAD"
-    const isRootPath = rel === "" || rel === "index.html"
-    const target = await resolveTarget(fs, root, rel, request)
+    const target = await resolveTarget(fs, options.root, rel, request)
     if (target !== null) {
         if ("location" in target) {
-            return applySecurityHeaders({
-                status: 301,
-                headers: { location: target.location, "cache-control": "no-store" },
-                body: "",
-            })
+            return { status: 301, headers: { location: target.location, "cache-control": "no-store" }, body: "" }
         }
         return await sendFile(fs, target, request, headOnly)
     }
     if (options.spaFallback && acceptsHtml(request) && method === "GET") {
-        const index = await resolveTarget(fs, root, "index.html", request)
+        const index = await resolveTarget(fs, options.root, "index.html", request)
         if (index !== null && !("location" in index)) {
             return await sendFile(fs, index, request, false)
         }
-        return missingWwwResponse()
-    }
-    if (isRootPath) {
-        return missingWwwResponse()
     }
     return textResponse(404, "未找到")
 }

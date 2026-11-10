@@ -15,7 +15,7 @@ concurrency:
 jobs:
     test:
         runs-on: ubuntu-24.04
-        timeout-minutes: 20
+        timeout-minutes: 15
         steps:
             - uses: actions/checkout@v7
 
@@ -28,23 +28,11 @@ jobs:
                   node-version: 24
                   cache: pnpm
 
-            - name: 安装依赖（严格按 lockfile，含前端 workspace）
+            - name: 安装依赖（严格按 lockfile）
               run: pnpm install --frozen-lockfile
 
-            - name: 插件类型检查
+            - name: 类型检查
               run: pnpm run typecheck
-
-            - name: 前端类型检查
-              run: pnpm -C frontend run typecheck
-
-            - name: 构建前端并核对提交的 www 产物
-              run: |
-                  set -euo pipefail
-                  pnpm run build:ui
-                  if ! git diff --exit-code -- www; then
-                    echo "www/ 与前端源码不一致：本地跑 pnpm run build:ui 后提交产物。"
-                    exit 1
-                  fi
 
             - name: 测试
               run: pnpm test
@@ -52,18 +40,15 @@ jobs:
             - name: 打包插件 zip
               run: pnpm run build:zip
 
-            - name: 冒烟：zip 里必须有清单、入口、后端源码与前端产物
+            - name: 冒烟：zip 里必须有清单、入口与网关连接/静态服务源码
               run: |
                   set -euo pipefail
                   unzip -Z1 release/*.zip > /tmp/zip.txt
                   cat /tmp/zip.txt
                   grep -qx 'package.json' /tmp/zip.txt
                   grep -qx 'index.ts' /tmp/zip.txt
+                  grep -qx 'src/config.ts' /tmp/zip.txt
+                  grep -qx 'src/assets.ts' /tmp/zip.txt
                   grep -qx 'src/static.ts' /tmp/zip.txt
                   grep -qx 'src/session.ts' /tmp/zip.txt
                   grep -qx 'src/sso-client.ts' /tmp/zip.txt
-                  grep -qx 'src/chat-store.ts' /tmp/zip.txt
-                  grep -qx 'src/router.ts' /tmp/zip.txt
-                  grep -qx 'www/index.html' /tmp/zip.txt
-                  grep -Eq '^www/assets/app-.*\.js$' /tmp/zip.txt
-                  grep -Eq '^www/assets/style-.*\.css$' /tmp/zip.txt

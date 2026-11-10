@@ -1,7 +1,4 @@
-# pnpm 工作区：插件本体 + 前端（Vite）
-packages:
-    - frontend
-
-# node-pty 是 @xyit/wellspring 的可选依赖，本仓库的单测/构建/插件运行都不需要原生编译
+# pnpm 配置（单包仓库；pnpm 11+ 的 allowBuilds 写在这里）
+# node-pty 是 @xyit/wellspring 的可选依赖，本插件不需要原生编译
 allowBuilds:
-  node-pty: false
+    node-pty: false

@@ -1,7 +1,7 @@
 {
     "name": "@etheros/wellspring-web",
-    "version": "0.4.0",
-    "description": "Wellspring 网页界面插件：在浏览器里与 Agent 对话（流式回复、会话续接、工具过程、提问与提权审批）",
+    "version": "0.5.0",
+    "description": "Wellspring 网页托管骨架：只保留网关连接与静态资源下发，网页由使用者自行编写",
     "license": "MIT",
     "repository": {
         "type": "git",
@@ -11,6 +11,9 @@
     "bugs": {
         "url": "https://github.com/EtherosGroup/wellspring-web/issues"
     },
+    "publishConfig": {
+        "access": "public"
+    },
     "type": "module",
     "main": "index.ts",
     "engines": {
@@ -19,15 +22,12 @@
     "files": [
         "index.ts",
         "src",
-        "docs",
-        "www",
         "README.md",
         "LICENSE"
     ],
     "scripts": {
         "typecheck": "tsc --noEmit",
         "test": "node scripts/run-tests.mjs",
-        "build:ui": "pnpm -C frontend run build",
         "build:zip": "node scripts/build-zip.mjs"
     },
     "devDependencies": {
@@ -47,19 +47,7 @@
                 "read": [],
                 "write": []
             },
-            "hostApi": [
-                "logger",
-                "fs",
-                "http",
-                "event",
-                "agent",
-                "models",
-                "workspaces",
-                "getHost"
-            ]
+            "hostApi": ["logger", "fs", "http", "event"]
         }
-    },
-    "publishConfig": {
-        "access": "public"
     }
 }

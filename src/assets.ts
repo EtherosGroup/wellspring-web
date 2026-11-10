@@ -1,116 +1,91 @@
 /*
- * 插件自带 www 的定位、主题模板与进程内文件读取
+ * 占位页
  *
- * 插件目录在沙箱里只读挂载在 /plugin（bwrap），src/assets.ts 的 ../www 即 /plugin/www
- * node:fs 的模块级 import 会被 access-guard 的 resolve hook 拒绝，进程内读取走
- * process.getBuiltinModule；它不经过 ESM 解析，是沙箱里读插件目录的既有通道
+ * 插件数据目录没有 www/ 时写入一份占位页；已存在的文件不覆盖，网页文件由使用者自己放进来
  */
 
-import { fileURLToPath } from "node:url"
-
-import type { StaticFileStat, StaticFileSystem } from "./static.ts"
-
-/** 插件自带静态资源目录的绝对路径；运行时为 /plugin/www */
-export const PLUGIN_WWW_DIR: string = trimTrailingSeparators(
-    fileURLToPath(new URL("../www/", import.meta.url)),
-)
-
-/** 主题偏好 cookie（light / dark；其它值视为跟随系统） */
-export const THEME_COOKIE = "wellspring_web_theme"
-
-/** 主题 cookie 取值 → 注入模板的主题属性值 */
-export function normalizeTheme(value: string | undefined): "" | "light" | "dark" {
-    return value === "light" || value === "dark" ? value : ""
-}
-
-/** 替换 index.html 中的 {{theme}} 占位 */
-export function applyThemeTemplate(html: string, theme: string): string {
-    const value = normalizeTheme(theme)
-    return html.includes("{{theme}}") ? html.split("{{theme}}").join(value) : html
-}
-
-/** 模板缺失时给开发者的提示页 */
-export const MISSING_WWW_HTML = `<!doctype html>
-<html lang="zh-CN">
-<head>
-<meta charset="utf-8">
-<title>Wellspring Web</title>
-</head>
-<body>
-<h1>前端产物缺失</h1>
-<p>运行 npm run build:ui 生成 www/ 后刷新</p>
-</body>
-</html>
-`
-
-type NodeFsPromises = typeof import("node:fs/promises")
-
-interface CachedBytes {
-    readonly size: number
-    readonly mtimeMs: number
-    readonly bytes: Uint8Array
-}
-
-function trimTrailingSeparators(path: string): string {
-    const trimmed = path.replace(/[\\/]+$/, "")
-    return trimmed === "" ? path : trimmed
-}
-
-/** node:fs/promises；首次读取时经 getBuiltinModule 加载 */
-function loadNodeFs(): NodeFsPromises {
-    const fs = process.getBuiltinModule("node:fs/promises")
-    if (fs === undefined) {
-        throw new Error("无法加载 node:fs/promises")
-    }
-    return fs
-}
-
-/**
- * 插件目录静态资源读取（绝对路径）
- *
- * 文件按 path + size + mtime 缓存字节：www 是构建产物，正常不会被改写
- */
-export function createPluginStaticFs(): StaticFileSystem {
-    let fs: NodeFsPromises | null = null
-    const cache = new Map<string, CachedBytes>()
-    const nodeFs = (): NodeFsPromises => {
-        fs ??= loadNodeFs()
-        return fs
-    }
-    return {
-        async stat(path: string): Promise<StaticFileStat | null> {
-            try {
-                const info = await nodeFs().stat(path)
-                const type: StaticFileStat["type"] = info.isFile()
-                    ? "file"
-                    : info.isDirectory()
-                      ? "directory"
-                      : "other"
-                return { type, size: info.size, mtimeMs: info.mtimeMs }
-            } catch {
-                return null
-            }
-        },
-        async readBytes(path: string): Promise<Uint8Array | null> {
-            try {
-                const info = await nodeFs().stat(path)
-                const cached = cache.get(path)
-                if (cached !== undefined && cached.size === info.size && cached.mtimeMs === info.mtimeMs) {
-                    return cached.bytes
-                }
-                const bytes = new Uint8Array(await nodeFs().readFile(path))
-                cache.set(path, { size: info.size, mtimeMs: info.mtimeMs, bytes })
-                return bytes
-            } catch {
-                return null
-            }
-        },
-    }
-}
-
-/** 写入型文件系统：测试 helper 与后续迁移脚本共用 */
 export interface WwwFileSystem {
     stat(path: string): Promise<{ readonly type: "file" | "directory" | "other" } | null>
     mkdir(path: string): Promise<void>
     writeText(path: string, text: string): Promise<void>
+}
+
+export interface SeedFile {
+    readonly name: string
+    readonly content: string
+}
+
+export const SEED_FILES: readonly SeedFile[] = [
+    {
+        name: "index.html",
+        content: `<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wellspring Web</title>
+<style>
+:root { color-scheme: light dark; }
+body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f4f4f5;
+    color: #18181b;
+    font-family: system-ui, -apple-system, "Segoe UI", "Noto Sans CJK SC", sans-serif;
+}
+main { max-width: 640px; padding: 32px; }
+h1 { margin: 0 0 12px; font-size: 22px; font-weight: 600; }
+p { margin: 0 0 8px; font-size: 14px; line-height: 1.7; color: #52525b; }
+code { padding: 1px 5px; border-radius: 4px; background: #e4e4e7; font-family: ui-monospace, Consolas, monospace; }
+@media (prefers-color-scheme: dark) {
+    body { background: #09090b; color: #fafafa; }
+    p { color: #a1a1aa; }
+    code { background: #27272a; }
+}
+</style>
+</head>
+<body>
+<main>
+<h1>Wellspring Web</h1>
+<p>占位页。把网页文件放进插件数据目录的 <code>www/</code> 即可，修改后刷新生效，不需要重启。</p>
+<p>经网关访问时页面在 <code>/web/</code> 前缀下；需要接口时在 index.ts 的 HTTP handler 里扩展。</p>
+</main>
+</body>
+</html>
+`,
+    },
+]
+
+export interface EnsureWwwResult {
+    readonly dirCreated: boolean
+    readonly created: readonly string[]
+    readonly skipped: readonly string[]
+}
+
+/** 补齐 www 目录与缺失的默认文件 */
+export async function ensureWww(fs: WwwFileSystem, dir: string): Promise<EnsureWwwResult> {
+    let dirCreated = false
+    const existing = await fs.stat(dir)
+    if (existing === null) {
+        await fs.mkdir(dir)
+        dirCreated = true
+    } else if (existing.type !== "directory") {
+        throw new Error(`www 路径不是目录：${dir}`)
+    }
+    const created: string[] = []
+    const skipped: string[] = []
+    for (const file of SEED_FILES) {
+        const path = `${dir}/${file.name}`
+        const stat = await fs.stat(path)
+        if (stat !== null) {
+            skipped.push(file.name)
+            continue
+        }
+        await fs.writeText(path, file.content)
+        created.push(file.name)
+    }
+    return { dirCreated, created, skipped }
 }
